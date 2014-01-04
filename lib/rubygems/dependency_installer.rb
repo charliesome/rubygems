@@ -210,34 +210,52 @@ class Gem::DependencyInstaller
 
     if consider_remote?
       begin
-        # TODO this is pulled from #spec_for_dependency to allow
-        # us to filter tuples before fetching specs.
-        #
-        tuples, errors = Gem::SpecFetcher.fetcher.search_for_dependency dep
+        if best_only # we can cheat here
+          best = nil
 
-        if best_only && !tuples.empty?
-          tuples.sort! { |a,b| b[0].version <=> a[0].version }
-          tuples = [tuples.first]
-        end
+          Gem.sources.each_source do |source|
+            dep_req = Gem::Resolver::DependencyRequest.new(dep, nil)
+            source.dependency_resolver_set.find_all(dep_req).each do |spec|
+              next unless Gem::Platform.match(spec.platform)
 
-        specs = []
-        tuples.each do |tup, source|
-          begin
-            spec = source.fetch_spec(tup)
-          rescue Gem::RemoteFetcher::FetchError => e
-            errors << Gem::SourceFetchProblem.new(source, e)
-          else
-            specs << [spec, source]
+              if !best || best[0].version < spec.version
+                best = [spec, source]
+              end
+            end
           end
-        end
 
-        if @errors
-          @errors += errors
+          if best
+            spec, source = best
+            actual_spec = Gem::Specification.new(spec.name, spec.version)
+            actual_spec.platform = spec.platform
+            actual_spec.dependencies.replace(spec.dependencies)
+            set << [[actual_spec, source]]
+          end
         else
-          @errors = errors
-        end
+          # TODO this is pulled from #spec_for_dependency to allow
+          # us to filter tuples before fetching specs.
+          #
+          tuples, errors = Gem::SpecFetcher.fetcher.search_for_dependency dep
 
-        set << specs
+          specs = []
+          tuples.each do |tup, source|
+            begin
+              spec = source.fetch_spec(tup)
+            rescue Gem::RemoteFetcher::FetchError => e
+              errors << Gem::SourceFetchProblem.new(source, e)
+            else
+              specs << [spec, source]
+            end
+          end
+
+          if @errors
+            @errors += errors
+          else
+            @errors = errors
+          end
+
+          set << specs
+        end
 
       rescue Gem::RemoteFetcher::FetchError => e
         # FIX if there is a problem talking to the network, we either need to always tell

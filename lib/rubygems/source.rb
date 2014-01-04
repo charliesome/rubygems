@@ -78,15 +78,17 @@ class Gem::Source
   # Returns a Set that can fetch specifications from this source.
 
   def dependency_resolver_set # :nodoc:
-    bundler_api_uri = api_uri + './api/v1/dependencies'
+    @dependency_resolver_set ||= begin
+      bundler_api_uri = api_uri + './api/v1/dependencies'
 
-    begin
-      fetcher = Gem::RemoteFetcher.fetcher
-      response = fetcher.fetch_path bundler_api_uri, nil, true
-    rescue Gem::RemoteFetcher::FetchError
-      Gem::Resolver::IndexSet.new self
-    else
-      Gem::Resolver::APISet.new response.uri
+      begin
+        fetcher = Gem::RemoteFetcher.fetcher
+        response = fetcher.fetch_path bundler_api_uri, nil, true
+      rescue Gem::RemoteFetcher::FetchError
+        Gem::Resolver::IndexSet.new self
+      else
+        Gem::Resolver::APISet.new response.uri
+      end
     end
   end
 
